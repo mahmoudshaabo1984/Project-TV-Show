@@ -35,6 +35,11 @@ function fetchShows() {
     .then(function (shows) {
       // Sort shows alphabetically, case-insensitive
       // localeCompare() compares two strings — returns negative if a < b, positive if a > b
+      // Filter out shows that do not have an episodes URL
+      shows = shows.filter(function (show) {
+        return show._links && show._links.episodes && show._links.episodes.href;
+      });
+
       shows.sort(function (a, b) {
         return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
       });
