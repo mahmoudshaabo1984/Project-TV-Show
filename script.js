@@ -4,6 +4,7 @@ let allEpisodes;
 function setup() {
   allEpisodes = getAllEpisodes();
   setupSearch();
+  setupEpisodeSelector();
   makePageForEpisodes(allEpisodes);
 }
 
@@ -27,6 +28,40 @@ function setupSearch() {
       } else {
         return false; // Throw it away!
       }
+    });
+
+    makePageForEpisodes(filteredEpisodes);
+  });
+}
+
+function setupEpisodeSelector() {
+  const episodeSelector = document.querySelector("#episode-selector");
+
+  for (const episode of allEpisodes) {
+    // 1. Format the season and episode numbers
+    const seasonCode = String(episode.season).padStart(2, "0");
+    const episodeCode = String(episode.number).padStart(2, "0");
+    const fullCode = `S${seasonCode}E${episodeCode}`;
+
+    const option = document.createElement("option");
+
+    option.value = episode.id;
+
+    option.textContent = `${fullCode} - ${episode.name}`;
+
+    episodeSelector.appendChild(option);
+  }
+
+  episodeSelector.addEventListener("change", (event) => {
+    const selectedEpisodeId = event.target.value;
+
+    if (selectedEpisodeId === "all") {
+      makePageForEpisodes(allEpisodes);
+      return;
+    }
+
+    const filteredEpisodes = allEpisodes.filter((episode) => {
+      return String(episode.id) === selectedEpisodeId;
     });
 
     makePageForEpisodes(filteredEpisodes);
