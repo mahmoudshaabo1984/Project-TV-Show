@@ -1,7 +1,36 @@
+let allEpisodes;
+
 // This function runs when the page loads
 function setup() {
-  const allEpisodes = getAllEpisodes();
+  allEpisodes = getAllEpisodes();
+  setupSearch();
   makePageForEpisodes(allEpisodes);
+}
+
+function setupSearch() {
+  const searchInput = document.querySelector("#search-input");
+
+  searchInput.addEventListener("input", (event) => {
+    const searchTerm = event.target.value.toLowerCase();
+
+    const filteredEpisodes = allEpisodes.filter((episode) => {
+      const lowerCaseName = episode.name.toLowerCase();
+      const lowerCaseSummary = episode.summary
+        ? episode.summary.toLowerCase()
+        : "";
+
+      if (
+        lowerCaseName.includes(searchTerm) ||
+        lowerCaseSummary.includes(searchTerm)
+      ) {
+        return true; // Keep this episode!
+      } else {
+        return false; // Throw it away!
+      }
+    });
+
+    makePageForEpisodes(filteredEpisodes);
+  });
 }
 
 // This function takes an array of episodes and displays each one on the page
@@ -10,6 +39,9 @@ function makePageForEpisodes(episodeList) {
 
   // Clear any existing content in the root element
   rootElem.textContent = "";
+
+  const countElem = document.querySelector("#search-count");
+  countElem.textContent = `Displaying ${episodeList.length} / ${allEpisodes.length} episodes`;
 
   // Loop through every episode in the array
   for (const episode of episodeList) {
