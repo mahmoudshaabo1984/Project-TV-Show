@@ -20,7 +20,7 @@ function fetchShows() {
     })
     .then(function (shows) {
       allShows = shows.filter(function (show) {
-        return show._links && show._links.episodes && show._links.episodes.href;
+        return show.id && show.name;
       });
       allShows.sort(function (a, b) {
         return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
@@ -58,7 +58,7 @@ function buildPage() {
 
   for (const show of allShows) {
     const option = document.createElement("option");
-    option.value = show._links.episodes.href;
+    option.value = `https://api.tvmaze.com/shows/${show.id}/episodes`;
     option.textContent = show.name;
     showSelector.appendChild(option);
   }
