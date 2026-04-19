@@ -1,62 +1,49 @@
-// LEVEL 400: Expand beyond one TV show
-// We now fetch a list of ALL shows from TVMaze, let the user pick one,
-// then fetch and display that show's episodes
-
-// SHOWS_API is the endpoint that returns a list of all available TV shows
 const SHOWS_API = "https://api.tvmaze.com/shows";
-
-// episodeCache is like a filing cabinet — when we fetch episodes for a show,
-// we store them here so we never fetch the same show twice
-// The key is the show's API URL, the value is the array of episodes
 const episodeCache = {};
-
-// allEpisodes holds the episodes currently displayed on screen
-// It starts as null — meaning "no show has been selected yet"
 let allEpisodes = null;
+let allShows = [];
 
-// This function runs when the page loads
 function setup() {
   showLoadingMessage("Loading shows, please wait...");
   fetchShows();
 }
 
 // ─────────────────────────────────────────────
-// SECTION 1: Fetch and display the shows list
+// SECTION 1: Fetch shows
 // ─────────────────────────────────────────────
 
 function fetchShows() {
   fetch(SHOWS_API)
     .then(function (response) {
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
       return response.json();
     })
     .then(function (shows) {
-      // Sort shows alphabetically, case-insensitive
-      // localeCompare() compares two strings — returns negative if a < b, positive if a > b
-      // Filter out shows that do not have an episodes URL
-      shows = shows.filter(function (show) {
+      allShows = shows.filter(function (show) {
         return show._links && show._links.episodes && show._links.episodes.href;
       });
-
-      shows.sort(function (a, b) {
+      allShows.sort(function (a, b) {
         return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
       });
       clearRoot();
-      makeShowSelector(shows);
-      // Show a prompt so the user knows to pick a show
-      showPromptMessage("Please select a TV show from the list above.");
+      buildPage();
     })
     .catch(function (error) {
       showErrorMessage(error.message);
     });
 }
 
-// makeShowSelector() builds the show drop-down and adds it to the page
-function makeShowSelector(shows) {
-  const root = document.getElementById("root");
+// ─────────────────────────────────────────────
+// SECTION 2: Build the full page layout
+// ─────────────────────────────────────────────
 
+// buildPage() creates the show selector and the episodes area together
+// This way we never lose the show selector when loading episodes
+function buildPage() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+
+  // --- Show selector ---
   const showSelectorLabel = document.createElement("label");
   showSelectorLabel.setAttribute("for", "show-selector");
   showSelectorLabel.textContent = "Select a TV show: ";
@@ -64,22 +51,18 @@ function makeShowSelector(shows) {
   const showSelector = document.createElement("select");
   showSelector.id = "show-selector";
 
-  // Default option
   const defaultOption = document.createElement("option");
   defaultOption.value = "";
   defaultOption.textContent = "-- Choose a show --";
   showSelector.appendChild(defaultOption);
 
-  // Add one option per show — value is the episodes API URL for that show
-  for (const show of shows) {
+  for (const show of allShows) {
     const option = document.createElement("option");
-    // _links.episodes.href is the URL we need to fetch episodes for this show
     option.value = show._links.episodes.href;
     option.textContent = show.name;
     showSelector.appendChild(option);
   }
 
-  // Container for the show selector
   const showNav = document.createElement("nav");
   showNav.id = "show-nav";
   showNav.setAttribute("aria-label", "Show selector");
@@ -87,69 +70,76 @@ function makeShowSelector(shows) {
   showNav.appendChild(showSelector);
   root.appendChild(showNav);
 
-  // Event: when the user picks a show, fetch its episodes
+  // --- Status message area ---
+  const statusMessage = document.createElement("p");
+  statusMessage.id = "status-message";
+  statusMessage.textContent = "Please select a TV show from the list above.";
+  root.appendChild(statusMessage);
+
+  // --- Episode area (empty at start) ---
+  const episodeArea = document.createElement("div");
+  episodeArea.id = "episode-area";
+  root.appendChild(episodeArea);
+
+  // --- Event: show selector ---
   showSelector.addEventListener("change", function () {
     if (showSelector.value === "") return;
-    const episodesUrl = showSelector.value;
-    loadEpisodesForShow(episodesUrl);
+    loadEpisodesForShow(showSelector.value);
   });
 }
 
-// loadEpisodesForShow() fetches episodes for the selected show
-// If we already fetched this show before, we use the cached data — never fetch twice
+// ─────────────────────────────────────────────
+// SECTION 3: Load episodes for selected show
+// ─────────────────────────────────────────────
+
 function loadEpisodesForShow(episodesUrl) {
-  // Check the cache first
-  // episodeCache[episodesUrl] will be the episodes array if we fetched it before,
-  // or undefined if we have not
+  // Use cached data if available — never fetch the same URL twice
   if (episodeCache[episodesUrl]) {
-    // We already have the data — use it directly without fetching
     allEpisodes = episodeCache[episodesUrl];
-    rebuildEpisodeControls();
-    makePageForEpisodes(allEpisodes);
+    buildEpisodeControls();
+    renderEpisodes(allEpisodes);
     return;
   }
 
-  // We have not fetched this show yet — fetch it now
-  showLoadingMessage("Loading episodes, please wait...");
+  // Show loading message in the episode area only — do NOT clear the show selector
+  const statusMessage = document.getElementById("status-message");
+  if (statusMessage)
+    statusMessage.textContent = "Loading episodes, please wait...";
+
+  const episodeArea = document.getElementById("episode-area");
+  if (episodeArea) episodeArea.innerHTML = "";
 
   fetch(episodesUrl)
     .then(function (response) {
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
       return response.json();
     })
     .then(function (episodes) {
-      // Store in cache so we never fetch this URL again
       episodeCache[episodesUrl] = episodes;
       allEpisodes = episodes;
-
-      // Restore the show selector (clearRoot removed it)
-      const showNav = document.getElementById("show-nav");
-      clearEpisodesArea();
-
-      rebuildEpisodeControls();
-      makePageForEpisodes(allEpisodes);
+      buildEpisodeControls();
+      renderEpisodes(allEpisodes);
     })
     .catch(function (error) {
-      showErrorMessage(error.message);
+      const statusMsg = document.getElementById("status-message");
+      if (statusMsg) {
+        statusMsg.setAttribute("role", "alert");
+        statusMsg.textContent = `Sorry, could not load episodes. (${error.message})`;
+      }
     });
 }
 
 // ─────────────────────────────────────────────
-// SECTION 2: Episode controls (search + selector)
+// SECTION 4: Episode controls
 // ─────────────────────────────────────────────
 
-// rebuildEpisodeControls() removes old episode controls and creates fresh ones
-// This is needed because every show has different episodes
-function rebuildEpisodeControls() {
-  // Remove old episode controls if they exist
-  const oldNav = document.getElementById("episode-nav");
-  if (oldNav) oldNav.remove();
-  const oldCount = document.getElementById("episode-count");
-  if (oldCount) oldCount.remove();
+function buildEpisodeControls() {
+  // Update status message
+  const statusMessage = document.getElementById("status-message");
+  if (statusMessage) statusMessage.textContent = "";
 
-  const root = document.getElementById("root");
+  const episodeArea = document.getElementById("episode-area");
+  episodeArea.innerHTML = "";
 
   // --- Search input ---
   const searchLabel = document.createElement("label");
@@ -166,7 +156,7 @@ function rebuildEpisodeControls() {
   countDisplay.id = "episode-count";
   countDisplay.textContent = `Showing ${allEpisodes.length} / ${allEpisodes.length} episodes`;
 
-  // --- Episode selector drop-down ---
+  // --- Episode selector ---
   const episodeSelectorLabel = document.createElement("label");
   episodeSelectorLabel.setAttribute("for", "episode-selector");
   episodeSelectorLabel.textContent = "Jump to episode: ";
@@ -197,13 +187,13 @@ function rebuildEpisodeControls() {
   episodeNav.appendChild(countDisplay);
   episodeNav.appendChild(episodeSelectorLabel);
   episodeNav.appendChild(episodeSelector);
-  root.appendChild(episodeNav);
+  episodeArea.appendChild(episodeNav);
 
-  // --- Events ---
+  // Events
   searchInput.addEventListener("input", function () {
     const term = searchInput.value;
     const matched = filterEpisodes(term);
-    makePageForEpisodes(matched);
+    renderEpisodes(matched);
     document.getElementById("episode-count").textContent =
       `Showing ${matched.length} / ${allEpisodes.length} episodes`;
     episodeSelector.value = "";
@@ -211,7 +201,7 @@ function rebuildEpisodeControls() {
 
   episodeSelector.addEventListener("change", function () {
     if (episodeSelector.value === "") {
-      makePageForEpisodes(allEpisodes);
+      renderEpisodes(allEpisodes);
       searchInput.value = "";
       document.getElementById("episode-count").textContent =
         `Showing ${allEpisodes.length} / ${allEpisodes.length} episodes`;
@@ -219,14 +209,12 @@ function rebuildEpisodeControls() {
     }
     const selectedId = Number(episodeSelector.value);
     const card = document.getElementById(`episode-${selectedId}`);
-    if (card) {
-      card.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
 
 // ─────────────────────────────────────────────
-// SECTION 3: Filter and render episodes
+// SECTION 5: Filter and render episodes
 // ─────────────────────────────────────────────
 
 function filterEpisodes(term) {
@@ -242,22 +230,22 @@ function filterEpisodes(term) {
   });
 }
 
-function makePageForEpisodes(episodeList) {
-  const root = document.getElementById("root");
+function renderEpisodes(episodeList) {
+  const episodeArea = document.getElementById("episode-area");
 
-  // Remove existing episode cards and footer
-  for (const card of root.querySelectorAll("article")) card.remove();
-  const oldFooter = root.querySelector("footer");
+  // Remove existing cards and footer
+  for (const card of episodeArea.querySelectorAll("article")) card.remove();
+  const oldFooter = episodeArea.querySelector("footer");
   if (oldFooter) oldFooter.remove();
-  const oldMessage = root.querySelector(".no-results, .prompt-message");
-  if (oldMessage) oldMessage.remove();
+  const oldMsg = episodeArea.querySelector(".no-results");
+  if (oldMsg) oldMsg.remove();
 
   if (episodeList.length === 0) {
     const message = document.createElement("p");
     message.className = "no-results";
     message.textContent =
       "No episodes match your search. Try a different term.";
-    root.appendChild(message);
+    episodeArea.appendChild(message);
     return;
   }
 
@@ -286,37 +274,22 @@ function makePageForEpisodes(episodeList) {
     card.appendChild(title);
     card.appendChild(image);
     card.appendChild(summary);
-    root.appendChild(card);
+    episodeArea.appendChild(card);
   }
 
   const footer = document.createElement("footer");
   const credit = document.createElement("p");
   credit.innerHTML = `Data sourced from <a href="https://www.tvmaze.com">TVMaze.com</a>`;
   footer.appendChild(credit);
-  root.appendChild(footer);
+  episodeArea.appendChild(footer);
 }
 
 // ─────────────────────────────────────────────
-// SECTION 4: Helper functions
+// SECTION 6: Helpers
 // ─────────────────────────────────────────────
 
 function clearRoot() {
   document.getElementById("root").innerHTML = "";
-}
-
-function clearEpisodesArea() {
-  const root = document.getElementById("root");
-  for (const card of root.querySelectorAll("article")) card.remove();
-  const oldFooter = root.querySelector("footer");
-  if (oldFooter) oldFooter.remove();
-  const oldNav = document.getElementById("episode-nav");
-  if (oldNav) oldNav.remove();
-  const oldCount = document.getElementById("episode-count");
-  if (oldCount) oldCount.remove();
-  const oldMsg = root.querySelector(
-    ".prompt-message, #loading-message, #error-message",
-  );
-  if (oldMsg) oldMsg.remove();
 }
 
 function showLoadingMessage(text) {
@@ -328,20 +301,12 @@ function showLoadingMessage(text) {
 }
 
 function showErrorMessage(detail) {
-  const root = document.getElementById("root");
-  root.innerHTML = "";
+  clearRoot();
   const errorBox = document.createElement("p");
   errorBox.id = "error-message";
   errorBox.setAttribute("role", "alert");
   errorBox.textContent = `Sorry, we could not load the data. Please try refreshing. (${detail})`;
-  root.appendChild(errorBox);
-}
-
-function showPromptMessage(text) {
-  const message = document.createElement("p");
-  message.className = "prompt-message";
-  message.textContent = text;
-  document.getElementById("root").appendChild(message);
+  document.getElementById("root").appendChild(errorBox);
 }
 
 window.addEventListener("load", setup);
